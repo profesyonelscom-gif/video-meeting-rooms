@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toplantı Odaları</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Giriş ekranı -->
+    <section id="lobby" class="screen active">
+      <div class="lobby-card">
+        <div class="logo">
+          <span class="logo-icon">📹</span>
+          <h1>Toplantı Odaları</h1>
+          <p>Görüntülü ve sesli canlı toplantı</p>
+        </div>
+
+        <form id="join-form">
+          <label for="user-name">Adınız</label>
+          <input
+            id="user-name"
+            type="text"
+            placeholder="Adınızı girin"
+            maxlength="32"
+            required
+            autocomplete="name"
+          />
+
+          <p class="section-label">Oda seçin</p>
+          <div id="room-list" class="room-grid"></div>
+
+          <button type="submit" class="btn btn-primary" id="join-btn" disabled>
+            Odaya Katıl
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Toplantı odası -->
+    <section id="room" class="screen">
+      <header class="room-header">
+        <div class="room-info">
+          <h2 id="room-title">Oda</h2>
+          <span id="participant-count" class="badge">0 katılımcı</span>
+        </div>
+        <div class="room-controls">
+          <button id="toggle-mic" class="btn btn-control active" title="Mikrofon">
+            <span class="icon">🎤</span>
+            <span class="label">Mikrofon</span>
+          </button>
+          <button id="toggle-cam" class="btn btn-control active" title="Kamera">
+            <span class="icon">📷</span>
+            <span class="label">Kamera</span>
+          </button>
+          <button id="leave-btn" class="btn btn-danger" title="Odadan ayrıl">
+            Ayrıl
+          </button>
+        </div>
+      </header>
+
+      <main id="video-grid" class="video-grid"></main>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,375 @@
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #242836;
+  --border: #2e3345;
+  --text: #e8eaef;
+  --text-muted: #9399ab;
+  --primary: #6366f1;
+  --primary-hover: #5558e3;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --success: #22c55e;
+  --radius: 12px;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.screen {
+  display: none;
+  min-height: 100vh;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* Lobby */
+#lobby {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+    var(--bg);
+}
+
+.lobby-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: var(--shadow);
+}
+
+.logo {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.logo-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.logo h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.logo p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+#join-form label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+
+#join-form input[type="text"] {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 1rem;
+  margin-bottom: 24px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#join-form input[type="text"]:focus {
+  border-color: var(--primary);
+}
+
+.section-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.room-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.room-option {
+  padding: 16px;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.room-option:hover {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+
+.room-option.selected {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.room-option .room-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.room-option .room-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  width: 100%;
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: var(--danger-hover);
+}
+
+.btn-control {
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+}
+
+.btn-control.active {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: var(--success);
+}
+
+.btn-control.muted {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: var(--danger);
+}
+
+.btn-control .icon {
+  font-size: 1.1rem;
+}
+
+.btn-control .label {
+  font-size: 0.8rem;
+}
+
+/* Room */
+#room {
+  flex-direction: column;
+}
+
+.room-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.room-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.room-info h2 {
+  font-size: 1.1rem;
+}
+
+.badge {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.room-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-grid {
+  flex: 1;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.video-tile {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  min-height: 180px;
+}
+
+.video-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.video-tile.local video {
+  transform: scaleX(-1);
+}
+
+.video-tile .tile-label {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+}
+
+.video-tile .tile-status {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+}
+
+.status-icon {
+  background: rgba(0, 0, 0, 0.65);
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+}
+
+.video-tile.no-video {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-tile .avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: white;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 12px 24px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  transition: opacity 0.3s;
+}
+
+.toast.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .lobby-card {
+    padding: 24px;
+  }
+
+  .room-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-control .label {
+    display: none;
+  }
+
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+}
