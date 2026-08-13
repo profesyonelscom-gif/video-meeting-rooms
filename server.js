@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const fs = require('fs');
 const path = require('path');
 const { Server } = require('socket.io');
 const roomStore = require('./lib/rooms');
@@ -18,7 +19,17 @@ const io = new Server(server, {
 
 app.use(express.json({ limit: '3mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
-app.use(express.static(path.join(__dirname, 'public')));
+
+function sendIndexPage(_req, res) {
+  const templatePath = path.join(__dirname, 'public', 'index.html');
+  const template = fs.readFileSync(templatePath, 'utf8');
+  const roomsJson = JSON.stringify(mapRoomsForApi()).replace(/</g, '\\u003c');
+  const html = template.replace('__ROOMS_JSON__', roomsJson);
+  res.type('html').send(html);
+}
+
+app.get('/', sendIndexPage);
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 function getParticipantCount(roomId) {
   return io.sockets.adapter.rooms.get(roomId)?.size || 0;

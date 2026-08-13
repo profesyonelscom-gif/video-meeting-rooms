@@ -72,39 +72,63 @@ async function loadSettings() {
 async function loadRooms() {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
     const res = await fetch('/api/rooms', { signal: controller.signal });
     clearTimeout(timeout);
 
-    if (!res.ok) return;
+    if (!res.ok) throw new Error('API hatasi');
 
     const rooms = await res.json();
     state.roomsCache = rooms;
     renderRoomList(rooms);
   } catch (err) {
     console.warn('Oda listesi guncellenemedi:', err.message);
+    if (!state.roomsCache.length) {
+      renderRoomList(getInitialRooms());
+    }
   }
 }
 
-function bindRoomButtons(container) {
-  container.querySelectorAll('.room-option').forEach((el) => {
-    if (el.dataset.bound) return;
-    el.dataset.bound = '1';
-    el.addEventListener('click', () => {
-      selectRoom(el.dataset.roomId, el.dataset.roomName, el);
-    });
+function getInitialRooms() {
+  const el = document.getElementById('initial-rooms');
+  if (!el) return [];
+  try {
+    const rooms = JSON.parse(el.textContent);
+    return Array.isArray(rooms) ? rooms : [];
+  } catch {
+    return [];
+  }
+}
+
+function initRoomList() {
+  const container = $('#room-list');
+  if (!container || container.dataset.ready) return;
+  container.dataset.ready = '1';
+
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('.room-option');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectRoom(
+      btn.getAttribute('data-room-id'),
+      btn.getAttribute('data-room-name'),
+      btn
+    );
   });
 }
 
 function renderRoomList(rooms) {
   const container = $('#room-list');
+  if (!container) return;
 
   if (!rooms.length) {
     container.innerHTML = `
       <p class="empty-msg">Henüz oda yok. <a href="/admin.html" class="text-link">Admin panelden</a> oda ekleyin.</p>
     `;
     state.selectedRoom = null;
+    state.selectedRoomName = '';
     updateJoinButton();
     return;
   }
@@ -116,11 +140,11 @@ function renderRoomList(rooms) {
     const el = document.createElement('button');
     el.type = 'button';
     el.className = 'room-option';
-    el.dataset.roomId = room.id;
-    el.dataset.roomName = room.name;
+    el.setAttribute('data-room-id', room.id);
+    el.setAttribute('data-room-name', room.name);
     el.innerHTML = `
       <div class="room-name">${escapeHtml(room.name)}</div>
-      <div class="room-count">${room.participants} katılımcı</div>
+      <div class="room-count">${room.participants || 0} katılımcı</div>
     `;
     container.appendChild(el);
 
@@ -129,11 +153,7 @@ function renderRoomList(rooms) {
     }
   });
 
-  bindRoomButtons(container);
-}
-
-function initRoomListFromPage() {
-  bindRoomButtons($('#room-list'));
+  state.roomsCache = rooms;
 }
 
 function escapeHtml(text) {
@@ -143,8 +163,9 @@ function escapeHtml(text) {
 }
 
 function selectRoom(roomId, roomName, el) {
+  if (!roomId || !el) return;
   state.selectedRoom = roomId;
-  state.selectedRoomName = roomName;
+  state.selectedRoomName = roomName || roomId;
   document.querySelectorAll('.room-option').forEach((o) => o.classList.remove('selected'));
   el.classList.add('selected');
   updateJoinButton();
@@ -611,7 +632,7 @@ $('#toggle-screen').addEventListener('click', toggleScreenShare);
 $('#leave-btn').addEventListener('click', leaveRoom);
 
 function initLobbySocket() {
-  if (state.lobbySocket) return;
+  if (state.lobbySocket || typeof io === 'undefined') return;
 
   state.lobbySocket = io({ transports: ['websocket', 'polling'] });
   state.lobbySocket.on('rooms-changed', (rooms) => {
@@ -620,7 +641,8 @@ function initLobbySocket() {
   });
 }
 
-initRoomListFromPage();
+initRoomList();
+renderRoomList(getInitialRooms());
 loadSettings();
 loadRooms();
 initLobbySocket();

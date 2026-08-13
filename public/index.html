@@ -8,7 +8,6 @@
 </head>
 <body>
   <div id="app">
-    <!-- Giriş ekranı -->
     <section id="lobby" class="screen active">
       <div class="lobby-card">
         <div class="logo">
@@ -28,31 +27,15 @@
             required
             autocomplete="name"
           />
-
-          <p class="section-label">Oda seçin</p>
-          <div id="room-list" class="room-grid">
-            <button type="button" class="room-option" data-room-id="oda-1" data-room-name="Genel Toplantı">
-              <div class="room-name">Genel Toplantı</div>
-              <div class="room-count"><span data-count="oda-1">0</span> katılımcı</div>
-            </button>
-            <button type="button" class="room-option" data-room-id="oda-2" data-room-name="Proje Odası">
-              <div class="room-name">Proje Odası</div>
-              <div class="room-count"><span data-count="oda-2">0</span> katılımcı</div>
-            </button>
-            <button type="button" class="room-option" data-room-id="oda-3" data-room-name="Eğitim Odası">
-              <div class="room-name">Eğitim Odası</div>
-              <div class="room-count"><span data-count="oda-3">0</span> katılımcı</div>
-            </button>
-            <button type="button" class="room-option" data-room-id="oda-4" data-room-name="Destek Odası">
-              <div class="room-name">Destek Odası</div>
-              <div class="room-count"><span data-count="oda-4">0</span> katılımcı</div>
-            </button>
-          </div>
-
-          <button type="submit" class="btn btn-primary" id="join-btn" disabled>
-            Odaya Katıl
-          </button>
         </form>
+
+        <p class="section-label">Oda seçin</p>
+        <script id="initial-rooms" type="application/json">__ROOMS_JSON__</script>
+        <div id="room-list" class="room-grid"></div>
+
+        <button type="submit" form="join-form" class="btn btn-primary" id="join-btn" disabled>
+          Odaya Katıl
+        </button>
 
         <div class="lobby-footer">
           <a href="/admin.html" class="text-link">Admin Panel →</a>
@@ -60,7 +43,6 @@
       </div>
     </section>
 
-    <!-- Toplantı odası -->
     <section id="room" class="screen">
       <header class="room-header">
         <div class="room-info">
