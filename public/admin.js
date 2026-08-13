@@ -141,8 +141,13 @@ function initAdminPanel() {
   loadLogoSettings();
   loadAdminRooms();
 
+  if (typeof io === 'undefined') return;
+
   const socket = io({ transports: ['websocket', 'polling'] });
-  socket.on('rooms-changed', renderAdminRooms);
+  socket.on('rooms-changed', (rooms) => {
+    if (Array.isArray(rooms)) renderAdminRooms(rooms);
+  });
+  socket.on('connect', () => loadAdminRooms());
 }
 
 function updateLogoPreview(logoUrl) {
@@ -251,13 +256,19 @@ $('#add-room-form').addEventListener('submit', async (e) => {
   if (!name) return;
 
   try {
-    await adminFetch('/api/admin/rooms', {
+    const data = await adminFetch('/api/admin/rooms', {
       method: 'POST',
       body: JSON.stringify({ name }),
     });
     $('#new-room-name').value = '';
     showToast('Oda eklendi');
-    loadAdminRooms();
+    if (data.room) {
+      const res = await fetch('/api/rooms', { cache: 'no-store' });
+      const rooms = await res.json();
+      renderAdminRooms(rooms);
+    } else {
+      loadAdminRooms();
+    }
   } catch (err) {
     showToast(err.message);
   }

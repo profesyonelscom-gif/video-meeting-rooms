@@ -25,10 +25,12 @@ function sendIndexPage(_req, res) {
   const template = fs.readFileSync(templatePath, 'utf8');
   const roomsJson = JSON.stringify(mapRoomsForApi()).replace(/</g, '\\u003c');
   const html = template.replace('__ROOMS_JSON__', roomsJson);
+  res.set('Cache-Control', 'no-store');
   res.type('html').send(html);
 }
 
 app.get('/', sendIndexPage);
+app.get('/index.html', (_req, res) => res.redirect('/'));
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 function getParticipantCount(roomId) {
@@ -54,6 +56,7 @@ function broadcastRoomsChanged() {
 }
 
 app.get('/api/rooms', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json(mapRoomsForApi());
 });
 
@@ -161,6 +164,8 @@ app.get('/health', (_req, res) => {
 
 io.on('connection', (socket) => {
   let currentRoom = null;
+
+  socket.emit('rooms-changed', mapRoomsForApi());
 
   socket.on('join-room', ({ roomId, userName }, callback) => {
     if (!roomStore.findById(roomId)) {

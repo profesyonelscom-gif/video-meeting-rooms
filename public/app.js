@@ -71,22 +71,23 @@ async function loadSettings() {
 
 async function loadRooms() {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    const res = await fetch('/api/rooms', { signal: controller.signal });
-    clearTimeout(timeout);
-
+    const res = await fetch('/api/rooms', { cache: 'no-store' });
     if (!res.ok) throw new Error('API hatasi');
 
     const rooms = await res.json();
+    if (!Array.isArray(rooms)) throw new Error('Gecersiz veri');
+
     state.roomsCache = rooms;
     renderRoomList(rooms);
+    return rooms;
   } catch (err) {
     console.warn('Oda listesi guncellenemedi:', err.message);
-    if (!state.roomsCache.length) {
-      renderRoomList(getInitialRooms());
+    const fallback = getInitialRooms();
+    if (fallback.length) {
+      state.roomsCache = fallback;
+      renderRoomList(fallback);
     }
+    return state.roomsCache;
   }
 }
 
@@ -635,18 +636,38 @@ function initLobbySocket() {
   if (state.lobbySocket || typeof io === 'undefined') return;
 
   state.lobbySocket = io({ transports: ['websocket', 'polling'] });
+
   state.lobbySocket.on('rooms-changed', (rooms) => {
+    if (!Array.isArray(rooms)) return;
     state.roomsCache = rooms;
     renderRoomList(rooms);
   });
+
+  state.lobbySocket.on('connect', () => {
+    loadRooms();
+  });
 }
 
-initRoomList();
-renderRoomList(getInitialRooms());
-loadSettings();
-loadRooms();
-initLobbySocket();
-setInterval(loadRooms, 15000);
+async function initApp() {
+  initRoomList();
+
+  const initial = getInitialRooms();
+  if (initial.length) {
+    renderRoomList(initial);
+  } else {
+    const container = $('#room-list');
+    if (container) {
+      container.innerHTML = '<p class="empty-msg">Odalar yükleniyor...</p>';
+    }
+  }
+
+  initLobbySocket();
+  await loadRooms();
+  loadSettings();
+  setInterval(loadRooms, 10000);
+}
+
+initApp();
 
 window.addEventListener('beforeunload', () => {
   if (state.socket) {
