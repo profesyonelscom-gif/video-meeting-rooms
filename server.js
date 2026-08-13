@@ -274,7 +274,7 @@ io.on('connection', (socket) => {
 
   socket.on('moderate-media', ({ targetId, action }) => {
     if (!currentRoom || !targetId) return;
-    if (!['mute-mic', 'mute-cam'].includes(action)) return;
+    if (!['mute-mic', 'unmute-mic', 'mute-cam', 'unmute-cam'].includes(action)) return;
 
     const targetSocket = io.sockets.sockets.get(targetId);
     if (!targetSocket?.rooms.has(currentRoom)) return;

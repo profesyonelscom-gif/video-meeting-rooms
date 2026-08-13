@@ -117,6 +117,13 @@ function setCamEnabled(enabled) {
   forEachLocalVideoTrack((track) => {
     track.enabled = enabled;
   });
+  state.peers.forEach((peer) => {
+    peer.pc.getSenders().forEach((sender) => {
+      if (sender.track?.kind === 'video') {
+        sender.track.enabled = enabled;
+      }
+    });
+  });
   syncMediaControlUi();
   updateLocalTileVideoState();
 }
@@ -433,8 +440,8 @@ function buildTileInnerHtml(name, isLocal, tileKey) {
   const modBtns = isLocal
     ? ''
     : `
-      <button type="button" class="tile-btn mute-remote-btn" title="Mikrofonu kapat" data-target="${tileKey}">🔇</button>
-      <button type="button" class="tile-btn cam-remote-btn" title="Kamerayı kapat" data-target="${tileKey}">📷</button>
+      <button type="button" class="tile-btn mute-remote-btn" title="Mikrofonu kapat" data-target="${tileKey}" data-action="mute-mic">🔇</button>
+      <button type="button" class="tile-btn cam-remote-btn" title="Kamerayı kapat" data-target="${tileKey}" data-action="mute-cam">📷</button>
     `;
 
   return `
@@ -457,34 +464,42 @@ function initVideoGridActions() {
     if (pinBtn) {
       e.preventDefault();
       e.stopPropagation();
-      pinTile(pinBtn.dataset.target);
+      pinTile(pinBtn.dataset.target, { fromPinButton: true });
       return;
     }
 
     const muteBtn = e.target.closest('.mute-remote-btn');
     if (muteBtn) {
       e.stopPropagation();
-      requestModerate(muteBtn.dataset.target, 'mute-mic');
+      requestModerate(muteBtn.dataset.target, muteBtn.dataset.action || 'mute-mic');
       return;
     }
 
     const camBtn = e.target.closest('.cam-remote-btn');
     if (camBtn) {
       e.stopPropagation();
-      requestModerate(camBtn.dataset.target, 'mute-cam');
+      requestModerate(camBtn.dataset.target, camBtn.dataset.action || 'mute-cam');
       return;
     }
 
     const miniTile = e.target.closest('.video-tile.mini');
     if (miniTile && !e.target.closest('.tile-btn')) {
-      pinTile(getTileKey(miniTile));
+      pinTile(getTileKey(miniTile), { forcePin: true });
     }
   });
 }
 
-function pinTile(tileKey) {
+function pinTile(tileKey, { fromPinButton = false, forcePin = false } = {}) {
   if (!tileKey) return;
-  state.pinnedTileId = state.pinnedTileId === tileKey ? null : tileKey;
+
+  if (forcePin) {
+    state.pinnedTileId = tileKey;
+  } else if (fromPinButton && state.pinnedTileId === tileKey) {
+    state.pinnedTileId = null;
+  } else {
+    state.pinnedTileId = tileKey;
+  }
+
   applyVideoLayout();
 }
 
@@ -506,6 +521,10 @@ function applyVideoLayout() {
   if (sidebar) {
     [...sidebar.querySelectorAll('.video-tile')].forEach((t) => grid.insertBefore(t, sidebar));
     sidebar.remove();
+  }
+  const orphanedPinned = grid.querySelector('.video-tile.pinned');
+  if (orphanedPinned) {
+    grid.appendChild(orphanedPinned);
   }
 
   const tiles = [...grid.querySelectorAll('.video-tile')];
@@ -529,40 +548,136 @@ function applyVideoLayout() {
       const sidebarEl = document.createElement('div');
       sidebarEl.className = 'mini-sidebar';
 
+      const pinnedTileEl = tiles.find((t) => getTileKey(t) === state.pinnedTileId);
       tiles.forEach((t) => {
-        const key = getTileKey(t);
-        if (key === state.pinnedTileId) {
-          t.classList.add('pinned');
-          grid.insertBefore(t, sidebarEl);
-        } else {
+        if (t !== pinnedTileEl) {
           t.classList.add('mini');
           sidebarEl.appendChild(t);
         }
       });
 
+      if (pinnedTileEl) {
+        pinnedTileEl.classList.add('pinned');
+      }
+
       grid.appendChild(sidebarEl);
+      if (pinnedTileEl) {
+        grid.appendChild(pinnedTileEl);
+      }
     }
   }
 
   updatePinButtons();
 }
 
+const MODERATE_LABELS = {
+  'mute-mic': 'mikrofon kapatma',
+  'unmute-mic': 'mikrofon açma',
+  'mute-cam': 'kamera kapatma',
+  'unmute-cam': 'kamera açma',
+};
+
 function requestModerate(targetId, action) {
-  if (!state.socket || !targetId) return;
+  if (!state.socket || !targetId || !action) return;
   const peer = state.peers.get(targetId);
   const name = peer?.remoteName || 'Katılımcı';
   state.socket.emit('moderate-media', { targetId, action });
-  showToast(`${name} için ${action === 'mute-mic' ? 'mikrofon' : 'kamera'} kapatma isteği gönderildi`);
+  showToast(`${name} için ${MODERATE_LABELS[action] || 'medya'} isteği gönderildi`);
+
+  const tile = document.getElementById(`tile-${targetId}`);
+  if (!tile) return;
+
+  const micBtn = tile.querySelector('.mute-remote-btn');
+  const camBtn = tile.querySelector('.cam-remote-btn');
+
+  if (action === 'mute-mic' && micBtn) {
+    micBtn.dataset.action = 'unmute-mic';
+    micBtn.textContent = '🎤';
+    micBtn.title = 'Mikrofonu aç';
+    micBtn.classList.remove('mod-active');
+    micBtn.classList.add('mod-muted');
+  } else if (action === 'unmute-mic' && micBtn) {
+    micBtn.dataset.action = 'mute-mic';
+    micBtn.textContent = '🔇';
+    micBtn.title = 'Mikrofonu kapat';
+    micBtn.classList.add('mod-active');
+    micBtn.classList.remove('mod-muted');
+  } else if (action === 'mute-cam' && camBtn) {
+    camBtn.dataset.action = 'unmute-cam';
+    camBtn.textContent = '🚫';
+    camBtn.title = 'Kamerayı aç';
+    camBtn.classList.remove('mod-active');
+    camBtn.classList.add('mod-muted');
+  } else if (action === 'unmute-cam' && camBtn) {
+    camBtn.dataset.action = 'mute-cam';
+    camBtn.textContent = '📷';
+    camBtn.title = 'Kamerayı kapat';
+    camBtn.classList.add('mod-active');
+    camBtn.classList.remove('mod-muted');
+  }
 }
 
 function handleModerateMedia({ fromName, action }) {
-  if (action === 'mute-mic' && state.micEnabled) {
+  if (action === 'mute-mic') {
     setMicEnabled(false);
     showToast(`${fromName} mikrofonunuzu kapattı`);
-  } else if (action === 'mute-cam' && state.camEnabled && !state.screenSharing) {
+  } else if (action === 'unmute-mic') {
+    setMicEnabled(true);
+    showToast(`${fromName} mikrofonunuzu açtı`);
+  } else if (action === 'mute-cam' && !state.screenSharing) {
     setCamEnabled(false);
     showToast(`${fromName} kameranızı kapattı`);
+  } else if (action === 'unmute-cam' && !state.screenSharing) {
+    setCamEnabled(true);
+    showToast(`${fromName} kameranızı açtı`);
   }
+}
+
+function isRemoteTrackLive(track) {
+  return Boolean(track && track.readyState === 'live' && track.enabled && !track.muted);
+}
+
+function updateRemoteModerationButtons(remoteId, stream) {
+  const tile = document.getElementById(`tile-${remoteId}`);
+  if (!tile || !stream) return;
+
+  const micBtn = tile.querySelector('.mute-remote-btn');
+  const camBtn = tile.querySelector('.cam-remote-btn');
+  const audioTrack = stream.getAudioTracks()[0];
+  const videoTrack = stream.getVideoTracks()[0];
+  const micOn = isRemoteTrackLive(audioTrack);
+  const camOn = isRemoteTrackLive(videoTrack);
+
+  if (micBtn) {
+    micBtn.dataset.action = micOn ? 'mute-mic' : 'unmute-mic';
+    micBtn.textContent = micOn ? '🔇' : '🎤';
+    micBtn.title = micOn ? 'Mikrofonu kapat' : 'Mikrofonu aç';
+    micBtn.classList.toggle('mod-active', micOn);
+    micBtn.classList.toggle('mod-muted', !micOn);
+  }
+
+  if (camBtn) {
+    camBtn.dataset.action = camOn ? 'mute-cam' : 'unmute-cam';
+    camBtn.textContent = camOn ? '📷' : '🚫';
+    camBtn.title = camOn ? 'Kamerayı kapat' : 'Kamerayı aç';
+    camBtn.classList.toggle('mod-active', camOn);
+    camBtn.classList.toggle('mod-muted', !camOn);
+  }
+}
+
+function bindRemoteStreamModerationListeners(remoteId, stream) {
+  if (!stream || stream._moderationBound) return;
+  stream._moderationBound = true;
+
+  const refresh = () => updateRemoteModerationButtons(remoteId, stream);
+
+  stream.getTracks().forEach((track) => {
+    track.addEventListener('mute', refresh);
+    track.addEventListener('unmute', refresh);
+    track.addEventListener('ended', refresh);
+  });
+
+  refresh();
 }
 
 function playVideo(video) {
@@ -628,6 +743,9 @@ function updateRemoteVideo(remoteId, stream, name) {
   } else {
     tile.querySelector('.avatar')?.remove();
   }
+
+  bindRemoteStreamModerationListeners(remoteId, stream);
+  updateRemoteModerationButtons(remoteId, stream);
 
   if (isNewTile) {
     applyVideoLayout();

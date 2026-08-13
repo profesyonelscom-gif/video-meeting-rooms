@@ -392,9 +392,10 @@ input[type="password"]:focus {
 .video-grid.spotlight-mode {
   display: flex;
   flex-direction: row;
-  gap: 10px;
+  gap: 0;
   align-items: stretch;
   overflow: hidden;
+  padding: 0;
 }
 
 .video-grid.spotlight-mode .video-tile.pinned {
@@ -404,33 +405,44 @@ input[type="password"]:focus {
   height: 100%;
   min-height: 0;
   max-height: 100%;
+  border-radius: 0;
+  border: none;
+  order: 2;
 }
 
 .mini-sidebar {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: min(200px, 26vw);
+  width: min(168px, 20vw);
   flex: 0 0 auto;
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  backdrop-filter: blur(6px);
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  backdrop-filter: blur(8px);
+  order: 1;
 }
 
 .video-grid.spotlight-mode .video-tile.mini {
   aspect-ratio: 16 / 10;
   min-height: 0;
-  max-height: 112px;
+  max-height: 100px;
   height: auto;
   width: 100%;
   flex-shrink: 0;
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.video-grid.spotlight-mode .video-tile.mini:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.35);
 }
 
 .video-grid.spotlight-mode .video-tile.mini:active {
@@ -520,6 +532,15 @@ input[type="password"]:focus {
 
 .tile-btn.active-pin {
   background: rgba(79, 70, 229, 0.9);
+}
+
+.tile-btn.mod-muted {
+  background: rgba(220, 38, 38, 0.75);
+}
+
+.video-grid.spotlight-mode .video-tile.pinned .tile-actions {
+  opacity: 1;
+  display: flex;
 }
 
 .video-tile.no-video {
@@ -726,9 +747,45 @@ input[type="password"]:focus {
     grid-template-columns: 1fr;
   }
 
+  #room {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
   .room-header {
-    padding: 10px 12px;
-    padding-top: max(10px, env(safe-area-inset-top));
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    gap: 8px;
+    flex-shrink: 0;
+    z-index: 20;
+    background: var(--surface);
+  }
+
+  .room-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .room-info h2 {
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 55vw;
+  }
+
+  .room-controls {
+    display: flex;
+    width: 100%;
+    gap: 6px;
+    flex-wrap: nowrap;
+    justify-content: stretch;
+    overflow: visible;
   }
 
   .btn-control .label {
@@ -736,7 +793,17 @@ input[type="password"]:focus {
   }
 
   .btn-control {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 8px;
+    justify-content: center;
+  }
+
+  #leave-btn {
+    flex: 1.3;
     padding: 10px 12px;
+    font-size: 0.85rem;
+    white-space: nowrap;
   }
 
   /* Normal grid: ekrana sığdır, kaydırma yok */
@@ -772,12 +839,13 @@ input[type="password"]:focus {
     min-height: 0;
   }
 
-  /* Spotlight: üstte büyük, altta film şeridi */
+  /* Spotlight: üstte tam ekran, altta film şeridi */
   .video-grid.spotlight-mode {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    gap: 8px;
+    gap: 0;
+    padding: 0;
   }
 
   .video-grid.spotlight-mode .video-tile.pinned {
@@ -785,19 +853,23 @@ input[type="password"]:focus {
     min-height: 0;
     width: 100%;
     order: 1;
+    border-radius: 0;
+    border: none;
   }
 
   .mini-sidebar {
     order: 2;
-    flex: 0 0 96px;
+    flex: 0 0 108px;
     width: 100%;
-    max-height: 96px;
+    max-height: 108px;
     flex-direction: row;
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
     gap: 8px;
-    padding: 6px;
+    padding: 8px;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
@@ -807,10 +879,10 @@ input[type="password"]:focus {
   }
 
   .video-grid.spotlight-mode .video-tile.mini {
-    flex: 0 0 128px;
-    width: 128px;
-    height: 72px;
-    max-height: 72px;
+    flex: 0 0 140px;
+    width: 140px;
+    height: 79px;
+    max-height: 79px;
     aspect-ratio: 16 / 9;
   }
 
