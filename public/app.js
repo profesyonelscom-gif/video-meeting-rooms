@@ -572,7 +572,8 @@ async function toggleScreenShare() {
     localTile?.classList.add('screen-share');
     localTile?.classList.remove('no-video');
     localTile?.querySelector('.avatar')?.remove();
-    localTile?.querySelector('.tile-label').textContent = `${state.userName} (Ekran)`;
+    const screenLabel = localTile?.querySelector('.tile-label');
+    if (screenLabel) screenLabel.textContent = `${state.userName} (Ekran)`;
 
     btn.classList.add('active');
     showToast('Ekran paylaşımı başladı');
