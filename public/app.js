@@ -43,28 +43,35 @@ function shouldInitiate(localId, remoteId) {
 }
 
 async function loadRooms() {
-  const container = $('#room-list');
-
   try {
-    const res = await fetch('/api/rooms');
-    if (!res.ok) throw new Error('Sunucuya bağlanılamadı');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch('/api/rooms', { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!res.ok) return;
 
     const rooms = await res.json();
     state.roomsCache = rooms;
     renderRoomList(rooms);
   } catch (err) {
-    console.error('Oda listesi hatasi:', err);
-    container.innerHTML = `
-      <p class="empty-msg error">Odalar yüklenemedi. Sunucunun çalıştığından emin olun.</p>
-    `;
-    state.selectedRoom = null;
-    updateJoinButton();
+    console.warn('Oda listesi guncellenemedi:', err.message);
   }
+}
+
+function bindRoomButtons(container) {
+  container.querySelectorAll('.room-option').forEach((el) => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('click', () => {
+      selectRoom(el.dataset.roomId, el.dataset.roomName, el);
+    });
+  });
 }
 
 function renderRoomList(rooms) {
   const container = $('#room-list');
-  container.innerHTML = '';
 
   if (!rooms.length) {
     container.innerHTML = `
@@ -76,23 +83,30 @@ function renderRoomList(rooms) {
   }
 
   const previousSelection = state.selectedRoom;
+  container.innerHTML = '';
 
   rooms.forEach((room) => {
     const el = document.createElement('button');
     el.type = 'button';
     el.className = 'room-option';
     el.dataset.roomId = room.id;
+    el.dataset.roomName = room.name;
     el.innerHTML = `
       <div class="room-name">${escapeHtml(room.name)}</div>
       <div class="room-count">${room.participants} katılımcı</div>
     `;
-    el.addEventListener('click', () => selectRoom(room.id, room.name, el));
     container.appendChild(el);
 
     if (previousSelection === room.id) {
       selectRoom(room.id, room.name, el);
     }
   });
+
+  bindRoomButtons(container);
+}
+
+function initRoomListFromPage() {
+  bindRoomButtons($('#room-list'));
 }
 
 function escapeHtml(text) {
@@ -579,6 +593,7 @@ function initLobbySocket() {
   });
 }
 
+initRoomListFromPage();
 loadRooms();
 initLobbySocket();
 setInterval(loadRooms, 15000);

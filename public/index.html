@@ -30,7 +30,22 @@
 
           <p class="section-label">Oda seçin</p>
           <div id="room-list" class="room-grid">
-            <p class="empty-msg" id="room-loading">Odalar yükleniyor...</p>
+            <button type="button" class="room-option" data-room-id="oda-1" data-room-name="Genel Toplantı">
+              <div class="room-name">Genel Toplantı</div>
+              <div class="room-count"><span data-count="oda-1">0</span> katılımcı</div>
+            </button>
+            <button type="button" class="room-option" data-room-id="oda-2" data-room-name="Proje Odası">
+              <div class="room-name">Proje Odası</div>
+              <div class="room-count"><span data-count="oda-2">0</span> katılımcı</div>
+            </button>
+            <button type="button" class="room-option" data-room-id="oda-3" data-room-name="Eğitim Odası">
+              <div class="room-name">Eğitim Odası</div>
+              <div class="room-count"><span data-count="oda-3">0</span> katılımcı</div>
+            </button>
+            <button type="button" class="room-option" data-room-id="oda-4" data-room-name="Destek Odası">
+              <div class="room-name">Destek Odası</div>
+              <div class="room-count"><span data-count="oda-4">0</span> katılımcı</div>
+            </button>
           </div>
 
           <button type="submit" class="btn btn-primary" id="join-btn" disabled>
