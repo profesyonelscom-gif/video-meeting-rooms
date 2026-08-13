@@ -244,6 +244,20 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('moderate-media', ({ targetId, action }) => {
+    if (!currentRoom || !targetId) return;
+    if (!['mute-mic', 'mute-cam'].includes(action)) return;
+
+    const targetSocket = io.sockets.sockets.get(targetId);
+    if (!targetSocket?.rooms.has(currentRoom)) return;
+
+    io.to(targetId).emit('moderate-media', {
+      from: socket.id,
+      fromName: socket.data.userName,
+      action,
+    });
+  });
+
   socket.on('leave-room', () => {
     if (!currentRoom) return;
     socket.to(currentRoom).emit('user-left', { socketId: socket.id });

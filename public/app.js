@@ -22,6 +22,8 @@ const state = {
   selectedRoomName: '',
   lobbySocket: null,
   roomsCache: [],
+  pinnedTileId: null,
+  videoGridReady: false,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -330,6 +332,129 @@ function getInitials(name) {
     .slice(0, 2);
 }
 
+function getTileKey(tileEl) {
+  if (!tileEl) return null;
+  return tileEl.id === 'tile-local' ? 'local' : tileEl.id.replace('tile-', '');
+}
+
+function buildTileInnerHtml(name, isLocal, tileKey) {
+  const label = isLocal ? `${name} (Sen)` : name;
+  const modBtns = isLocal
+    ? ''
+    : `
+      <button type="button" class="tile-btn mute-remote-btn" title="Mikrofonu kapat" data-target="${tileKey}">🔇</button>
+      <button type="button" class="tile-btn cam-remote-btn" title="Kamerayı kapat" data-target="${tileKey}">📷</button>
+    `;
+
+  return `
+    <video autoplay playsinline ${isLocal ? 'muted' : ''}></video>
+    <span class="tile-label">${escapeHtml(label)}</span>
+    <div class="tile-actions">
+      <button type="button" class="tile-btn pin-btn" title="Büyüt" data-target="${tileKey}">⛶</button>
+      ${modBtns}
+    </div>
+  `;
+}
+
+function initVideoGridActions() {
+  const grid = $('#video-grid');
+  if (!grid || grid.dataset.actionsReady) return;
+  grid.dataset.actionsReady = '1';
+
+  grid.addEventListener('click', (e) => {
+    const pinBtn = e.target.closest('.pin-btn');
+    if (pinBtn) {
+      pinTile(pinBtn.dataset.target);
+      return;
+    }
+
+    const muteBtn = e.target.closest('.mute-remote-btn');
+    if (muteBtn) {
+      requestModerate(muteBtn.dataset.target, 'mute-mic');
+      return;
+    }
+
+    const camBtn = e.target.closest('.cam-remote-btn');
+    if (camBtn) {
+      requestModerate(camBtn.dataset.target, 'mute-cam');
+      return;
+    }
+
+    const miniTile = e.target.closest('.video-tile.mini');
+    if (miniTile) {
+      pinTile(getTileKey(miniTile));
+    }
+  });
+}
+
+function pinTile(tileKey) {
+  if (!tileKey) return;
+  state.pinnedTileId = state.pinnedTileId === tileKey ? null : tileKey;
+  applyVideoLayout();
+}
+
+function applyVideoLayout() {
+  const grid = $('#video-grid');
+  if (!grid) return;
+
+  const sidebar = grid.querySelector('.mini-sidebar');
+  if (sidebar) {
+    [...sidebar.querySelectorAll('.video-tile')].forEach((t) => grid.insertBefore(t, sidebar));
+    sidebar.remove();
+  }
+
+  const tiles = [...grid.querySelectorAll('.video-tile')];
+  const count = tiles.length;
+
+  grid.classList.remove('count-1', 'count-2', 'count-many', 'spotlight-mode');
+  tiles.forEach((t) => {
+    t.classList.remove('pinned', 'mini');
+    t.querySelector('.pin-btn')?.classList.remove('active-pin');
+  });
+
+  if (count === 1) grid.classList.add('count-1');
+  else if (count === 2) grid.classList.add('count-2');
+  else if (count > 2) grid.classList.add('count-many');
+
+  if (state.pinnedTileId && count > 1) {
+    grid.classList.add('spotlight-mode');
+    const sidebarEl = document.createElement('div');
+    sidebarEl.className = 'mini-sidebar';
+
+    tiles.forEach((t) => {
+      const key = getTileKey(t);
+      if (key === state.pinnedTileId) {
+        t.classList.add('pinned');
+        t.querySelector('.pin-btn')?.classList.add('active-pin');
+        grid.insertBefore(t, sidebarEl);
+      } else {
+        t.classList.add('mini');
+        sidebarEl.appendChild(t);
+      }
+    });
+
+    grid.appendChild(sidebarEl);
+  }
+}
+
+function requestModerate(targetId, action) {
+  if (!state.socket || !targetId) return;
+  const peer = state.peers.get(targetId);
+  const name = peer?.remoteName || 'Katılımcı';
+  state.socket.emit('moderate-media', { targetId, action });
+  showToast(`${name} için ${action === 'mute-mic' ? 'mikrofon' : 'kamera'} kapatma isteği gönderildi`);
+}
+
+function handleModerateMedia({ fromName, action }) {
+  if (action === 'mute-mic' && state.micEnabled) {
+    toggleMic();
+    showToast(`${fromName} mikrofonunuzu kapattı`);
+  } else if (action === 'mute-cam' && state.camEnabled && !state.screenSharing) {
+    toggleCam();
+    showToast(`${fromName} kameranızı kapattı`);
+  }
+}
+
 function playVideo(video) {
   video.play().catch((err) => {
     console.warn('Video oynatilamadi:', err);
@@ -338,18 +463,16 @@ function playVideo(video) {
 
 function addLocalVideo() {
   const grid = $('#video-grid');
+  initVideoGridActions();
   const tile = document.createElement('div');
   tile.className = 'video-tile local';
   tile.id = 'tile-local';
-  tile.innerHTML = `
-    <video autoplay playsinline muted></video>
-    <span class="tile-label">${state.userName} (Sen)</span>
-    <div class="tile-status"></div>
-  `;
+  tile.innerHTML = buildTileInnerHtml(state.userName, true, 'local');
   const video = tile.querySelector('video');
   video.srcObject = state.localStream;
   playVideo(video);
   grid.appendChild(tile);
+  applyVideoLayout();
 }
 
 function updateLocalVideo() {
@@ -368,11 +491,7 @@ function updateRemoteVideo(remoteId, stream, name) {
     tile = document.createElement('div');
     tile.className = 'video-tile';
     tile.id = `tile-${remoteId}`;
-    tile.innerHTML = `
-      <video autoplay playsinline></video>
-      <span class="tile-label">${name}</span>
-      <div class="tile-status"></div>
-    `;
+    tile.innerHTML = buildTileInnerHtml(name, false, remoteId);
     grid.appendChild(tile);
   }
 
@@ -399,6 +518,7 @@ function updateRemoteVideo(remoteId, stream, name) {
     tile.querySelector('.avatar')?.remove();
   }
 
+  applyVideoLayout();
   updateParticipantCount();
 }
 
@@ -418,6 +538,8 @@ function removePeer(remoteId) {
     state.peers.delete(remoteId);
   }
   document.getElementById(`tile-${remoteId}`)?.remove();
+  if (state.pinnedTileId === remoteId) state.pinnedTileId = null;
+  applyVideoLayout();
   updateParticipantCount();
 }
 
@@ -449,6 +571,7 @@ function cleanupRoom() {
   $('#toggle-screen').classList.remove('active');
   state.roomId = null;
   state.socketId = null;
+  state.pinnedTileId = null;
 }
 
 async function joinRoom() {
@@ -476,6 +599,10 @@ async function joinRoom() {
 
   state.socket.on('signal', async ({ from, signal, userName: name }) => {
     await handleSignal(from, signal, name);
+  });
+
+  state.socket.on('moderate-media', (payload) => {
+    handleModerateMedia(payload);
   });
 
   state.socket.emit('join-room', { roomId, userName }, async (response) => {
