@@ -82,6 +82,25 @@ function broadcastRoomsChanged() {
   io.emit('rooms-changed', mapRoomsForApi());
 }
 
+function disconnectSocketFromRoom(socket, roomId) {
+  if (!roomId) return;
+  socket.to(roomId).emit('user-left', { socketId: socket.id });
+  socket.leave(roomId);
+  socket.data.roomId = null;
+}
+
+function replaceStaleClientInRoom(roomId, clientId, exceptSocketId) {
+  if (!clientId) return;
+  for (const [id, peerSocket] of io.sockets.sockets) {
+    if (id === exceptSocketId) continue;
+    if (peerSocket.data.clientId === clientId && peerSocket.data.roomId === roomId) {
+      peerSocket.emit('session-replaced');
+      disconnectSocketFromRoom(peerSocket, roomId);
+      peerSocket.disconnect(true);
+    }
+  }
+}
+
 app.get('/api/rooms', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json(mapRoomsForApi());
@@ -194,18 +213,25 @@ io.on('connection', (socket) => {
 
   socket.emit('rooms-changed', mapRoomsForApi());
 
-  socket.on('join-room', ({ roomId, userName }, callback) => {
+  socket.on('join-room', ({ roomId, userName, clientId }, callback) => {
     if (!roomStore.findById(roomId)) {
       callback?.({ ok: false, error: 'Geçersiz oda' });
       return;
     }
 
-    if (currentRoom) {
-      socket.leave(currentRoom);
+    if (currentRoom && currentRoom !== roomId) {
+      disconnectSocketFromRoom(socket, currentRoom);
+      currentRoom = null;
+    }
+
+    if (clientId) {
+      replaceStaleClientInRoom(roomId, clientId, socket.id);
     }
 
     currentRoom = roomId;
     socket.join(roomId);
+    socket.data.roomId = roomId;
+    socket.data.clientId = clientId || null;
 
     const peers = [...io.sockets.adapter.rooms.get(roomId)]
       .filter((id) => id !== socket.id)
@@ -225,6 +251,8 @@ io.on('connection', (socket) => {
     });
 
     const room = roomStore.findById(roomId);
+
+    broadcastRoomsChanged();
 
     callback?.({
       ok: true,
@@ -260,15 +288,21 @@ io.on('connection', (socket) => {
 
   socket.on('leave-room', () => {
     if (!currentRoom) return;
-    socket.to(currentRoom).emit('user-left', { socketId: socket.id });
-    socket.leave(currentRoom);
+    disconnectSocketFromRoom(socket, currentRoom);
     currentRoom = null;
+    broadcastRoomsChanged();
   });
 
   socket.on('disconnect', () => {
-    if (currentRoom) {
-      socket.to(currentRoom).emit('user-left', { socketId: socket.id });
+    const roomId = socket.data.roomId;
+    if (!roomId) {
+      currentRoom = null;
+      return;
     }
+    socket.to(roomId).emit('user-left', { socketId: socket.id });
+    socket.data.roomId = null;
+    currentRoom = null;
+    broadcastRoomsChanged();
   });
 });
 

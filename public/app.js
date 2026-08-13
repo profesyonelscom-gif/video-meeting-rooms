@@ -40,8 +40,85 @@ function showScreen(id) {
   $(`#${id}`).classList.add('active');
 }
 
+function getClientId() {
+  try {
+    let id = sessionStorage.getItem('meetingClientId');
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem('meetingClientId', id);
+    }
+    return id;
+  } catch {
+    return `client-${Date.now()}`;
+  }
+}
+
 function shouldInitiate(localId, remoteId) {
   return localId < remoteId;
+}
+
+function forEachLocalAudioTrack(fn) {
+  [state.cameraStream, state.localStream, state.screenStream].forEach((stream) => {
+    stream?.getAudioTracks().forEach(fn);
+  });
+}
+
+function forEachLocalVideoTrack(fn) {
+  state.cameraStream?.getVideoTracks().forEach(fn);
+}
+
+function syncMediaControlUi() {
+  const micBtn = $('#toggle-mic');
+  const camBtn = $('#toggle-cam');
+  micBtn?.classList.toggle('active', state.micEnabled);
+  micBtn?.classList.toggle('muted', !state.micEnabled);
+  camBtn?.classList.toggle('active', state.camEnabled);
+  camBtn?.classList.toggle('muted', !state.camEnabled);
+}
+
+function updateLocalTileVideoState() {
+  const localTile = $('#tile-local');
+  if (!localTile || state.screenSharing) return;
+
+  localTile.classList.toggle('no-video', !state.camEnabled);
+
+  if (!state.camEnabled) {
+    let avatar = localTile.querySelector('.avatar');
+    if (!avatar) {
+      avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      localTile.appendChild(avatar);
+    }
+    avatar.textContent = getInitials(state.userName);
+  } else {
+    localTile.querySelector('.avatar')?.remove();
+  }
+}
+
+function setMicEnabled(enabled) {
+  state.micEnabled = enabled;
+  forEachLocalAudioTrack((track) => {
+    track.enabled = enabled;
+  });
+  state.peers.forEach((peer) => {
+    peer.pc.getSenders().forEach((sender) => {
+      if (sender.track?.kind === 'audio') {
+        sender.track.enabled = enabled;
+      }
+    });
+  });
+  syncMediaControlUi();
+}
+
+function setCamEnabled(enabled) {
+  if (state.screenSharing) return;
+
+  state.camEnabled = enabled;
+  forEachLocalVideoTrack((track) => {
+    track.enabled = enabled;
+  });
+  syncMediaControlUi();
+  updateLocalTileVideoState();
 }
 
 function applyLogo(logoUrl) {
@@ -224,7 +301,13 @@ async function addIceCandidate(peer, candidate) {
 
 function createPeerConnection(remoteId, remoteName) {
   const existing = state.peers.get(remoteId);
-  if (existing) return existing.pc;
+  if (existing && existing.pc.connectionState !== 'closed') {
+    return existing.pc;
+  }
+  if (existing) {
+    existing.pc.close();
+    state.peers.delete(remoteId);
+  }
 
   const pc = new RTCPeerConnection(ICE_SERVERS);
   const peer = { pc, remoteName, remoteStream: null, pendingCandidates: [] };
@@ -258,8 +341,16 @@ function createPeerConnection(remoteId, remoteName) {
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'failed') {
       pc.restartIce();
-    } else if (pc.connectionState === 'closed') {
-      removePeer(remoteId);
+    } else if (pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
+      if (pc.connectionState === 'disconnected') {
+        setTimeout(() => {
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+            removePeer(remoteId);
+          }
+        }, 4000);
+      } else {
+        removePeer(remoteId);
+      }
     }
   };
 
@@ -364,24 +455,28 @@ function initVideoGridActions() {
   grid.addEventListener('click', (e) => {
     const pinBtn = e.target.closest('.pin-btn');
     if (pinBtn) {
+      e.preventDefault();
+      e.stopPropagation();
       pinTile(pinBtn.dataset.target);
       return;
     }
 
     const muteBtn = e.target.closest('.mute-remote-btn');
     if (muteBtn) {
+      e.stopPropagation();
       requestModerate(muteBtn.dataset.target, 'mute-mic');
       return;
     }
 
     const camBtn = e.target.closest('.cam-remote-btn');
     if (camBtn) {
+      e.stopPropagation();
       requestModerate(camBtn.dataset.target, 'mute-cam');
       return;
     }
 
     const miniTile = e.target.closest('.video-tile.mini');
-    if (miniTile) {
+    if (miniTile && !e.target.closest('.tile-btn')) {
       pinTile(getTileKey(miniTile));
     }
   });
@@ -391,6 +486,16 @@ function pinTile(tileKey) {
   if (!tileKey) return;
   state.pinnedTileId = state.pinnedTileId === tileKey ? null : tileKey;
   applyVideoLayout();
+}
+
+function updatePinButtons() {
+  document.querySelectorAll('.video-tile .pin-btn').forEach((btn) => {
+    const key = btn.dataset.target;
+    const isPinned = state.pinnedTileId === key;
+    btn.classList.toggle('active-pin', isPinned);
+    btn.title = isPinned ? 'Küçült' : 'Büyüt';
+    btn.textContent = isPinned ? '⊟' : '⛶';
+  });
 }
 
 function applyVideoLayout() {
@@ -409,7 +514,6 @@ function applyVideoLayout() {
   grid.classList.remove('count-1', 'count-2', 'count-many', 'spotlight-mode');
   tiles.forEach((t) => {
     t.classList.remove('pinned', 'mini');
-    t.querySelector('.pin-btn')?.classList.remove('active-pin');
   });
 
   if (count === 1) grid.classList.add('count-1');
@@ -417,24 +521,30 @@ function applyVideoLayout() {
   else if (count > 2) grid.classList.add('count-many');
 
   if (state.pinnedTileId && count > 1) {
-    grid.classList.add('spotlight-mode');
-    const sidebarEl = document.createElement('div');
-    sidebarEl.className = 'mini-sidebar';
+    const pinnedTile = tiles.find((t) => getTileKey(t) === state.pinnedTileId);
+    if (!pinnedTile) {
+      state.pinnedTileId = null;
+    } else {
+      grid.classList.add('spotlight-mode');
+      const sidebarEl = document.createElement('div');
+      sidebarEl.className = 'mini-sidebar';
 
-    tiles.forEach((t) => {
-      const key = getTileKey(t);
-      if (key === state.pinnedTileId) {
-        t.classList.add('pinned');
-        t.querySelector('.pin-btn')?.classList.add('active-pin');
-        grid.insertBefore(t, sidebarEl);
-      } else {
-        t.classList.add('mini');
-        sidebarEl.appendChild(t);
-      }
-    });
+      tiles.forEach((t) => {
+        const key = getTileKey(t);
+        if (key === state.pinnedTileId) {
+          t.classList.add('pinned');
+          grid.insertBefore(t, sidebarEl);
+        } else {
+          t.classList.add('mini');
+          sidebarEl.appendChild(t);
+        }
+      });
 
-    grid.appendChild(sidebarEl);
+      grid.appendChild(sidebarEl);
+    }
   }
+
+  updatePinButtons();
 }
 
 function requestModerate(targetId, action) {
@@ -447,10 +557,10 @@ function requestModerate(targetId, action) {
 
 function handleModerateMedia({ fromName, action }) {
   if (action === 'mute-mic' && state.micEnabled) {
-    toggleMic();
+    setMicEnabled(false);
     showToast(`${fromName} mikrofonunuzu kapattı`);
   } else if (action === 'mute-cam' && state.camEnabled && !state.screenSharing) {
-    toggleCam();
+    setCamEnabled(false);
     showToast(`${fromName} kameranızı kapattı`);
   }
 }
@@ -486,6 +596,7 @@ function updateLocalVideo() {
 function updateRemoteVideo(remoteId, stream, name) {
   let tile = document.getElementById(`tile-${remoteId}`);
   const grid = $('#video-grid');
+  const isNewTile = !tile;
 
   if (!tile) {
     tile = document.createElement('div');
@@ -518,7 +629,9 @@ function updateRemoteVideo(remoteId, stream, name) {
     tile.querySelector('.avatar')?.remove();
   }
 
-  applyVideoLayout();
+  if (isNewTile) {
+    applyVideoLayout();
+  }
   updateParticipantCount();
 }
 
@@ -532,13 +645,21 @@ async function replaceVideoTrackOnPeers(track) {
 }
 
 function removePeer(remoteId) {
+  if (!remoteId) return;
+
   const peer = state.peers.get(remoteId);
   if (peer) {
+    peer.pc.onconnectionstatechange = null;
     peer.pc.close();
     state.peers.delete(remoteId);
   }
+
   document.getElementById(`tile-${remoteId}`)?.remove();
-  if (state.pinnedTileId === remoteId) state.pinnedTileId = null;
+
+  if (state.pinnedTileId === remoteId || state.pinnedTileId === String(remoteId)) {
+    state.pinnedTileId = null;
+  }
+
   applyVideoLayout();
   updateParticipantCount();
 }
@@ -572,6 +693,9 @@ function cleanupRoom() {
   state.roomId = null;
   state.socketId = null;
   state.pinnedTileId = null;
+  state.micEnabled = true;
+  state.camEnabled = true;
+  syncMediaControlUi();
 }
 
 async function joinRoom() {
@@ -580,15 +704,31 @@ async function joinRoom() {
 
   if (!userName || !roomId) return;
 
+  if (state.socket) {
+    cleanupRoom();
+  }
+
   const mediaOk = await getLocalMedia();
   if (!mediaOk) return;
 
   state.userName = userName;
   state.roomId = roomId;
+  state.micEnabled = true;
+  state.camEnabled = true;
 
   state.socket = io({ transports: ['websocket', 'polling'] });
 
+  state.socket.on('session-replaced', () => {
+    showToast('Başka bir sekmeden odaya girildi');
+    cleanupRoom();
+    showScreen('lobby');
+    loadRooms();
+  });
+
   state.socket.on('user-joined', async ({ socketId, userName: name }) => {
+    if (state.peers.has(socketId) || document.getElementById(`tile-${socketId}`)) {
+      removePeer(socketId);
+    }
     showToast(`${name} odaya katıldı`);
     await createOffer(socketId, name);
   });
@@ -605,7 +745,7 @@ async function joinRoom() {
     handleModerateMedia(payload);
   });
 
-  state.socket.emit('join-room', { roomId, userName }, async (response) => {
+  state.socket.emit('join-room', { roomId, userName, clientId: getClientId() }, async (response) => {
     if (!response?.ok) {
       showToast(response?.error || 'Odaya katılılamadı');
       cleanupRoom();
@@ -617,6 +757,7 @@ async function joinRoom() {
     $('#room-title').textContent = response.roomName || state.selectedRoomName || roomId;
     showScreen('room');
     addLocalVideo();
+    syncMediaControlUi();
     updateParticipantCount();
 
     for (const peer of response.peers) {
@@ -626,13 +767,7 @@ async function joinRoom() {
 }
 
 function toggleMic() {
-  state.micEnabled = !state.micEnabled;
-  state.cameraStream?.getAudioTracks().forEach((t) => {
-    t.enabled = state.micEnabled;
-  });
-  const btn = $('#toggle-mic');
-  btn.classList.toggle('active', state.micEnabled);
-  btn.classList.toggle('muted', !state.micEnabled);
+  setMicEnabled(!state.micEnabled);
 }
 
 function toggleCam() {
@@ -641,30 +776,7 @@ function toggleCam() {
     return;
   }
 
-  state.camEnabled = !state.camEnabled;
-  state.cameraStream?.getVideoTracks().forEach((t) => {
-    t.enabled = state.camEnabled;
-  });
-
-  const btn = $('#toggle-cam');
-  btn.classList.toggle('active', state.camEnabled);
-  btn.classList.toggle('muted', !state.camEnabled);
-
-  const localTile = $('#tile-local');
-  if (localTile) {
-    localTile.classList.toggle('no-video', !state.camEnabled);
-    if (!state.camEnabled) {
-      let avatar = localTile.querySelector('.avatar');
-      if (!avatar) {
-        avatar = document.createElement('div');
-        avatar.className = 'avatar';
-        localTile.appendChild(avatar);
-      }
-      avatar.textContent = getInitials(state.userName);
-    } else {
-      localTile.querySelector('.avatar')?.remove();
-    }
-  }
+  setCamEnabled(!state.camEnabled);
 }
 
 async function toggleScreenShare() {
@@ -686,11 +798,11 @@ async function toggleScreenShare() {
     state.screenSharing = true;
     state.localStream = state.screenStream;
 
-    if (state.cameraStream) {
-      state.cameraStream.getVideoTracks().forEach((t) => {
-        t.enabled = false;
-      });
-    }
+  if (state.cameraStream) {
+    state.cameraStream.getVideoTracks().forEach((t) => {
+      t.enabled = false;
+    });
+  }
 
     await replaceVideoTrackOnPeers(screenTrack);
     updateLocalVideo();

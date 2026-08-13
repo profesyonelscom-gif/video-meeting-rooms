@@ -821,6 +821,11 @@ input[type="password"]:focus {
     left: 4px;
   }
 
+  .video-grid.spotlight-mode .video-tile.pinned .tile-actions {
+    opacity: 1;
+    display: flex;
+  }
+
   .video-grid.spotlight-mode .video-tile.mini .tile-actions {
     display: none;
   }
