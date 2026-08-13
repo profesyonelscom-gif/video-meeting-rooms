@@ -3,6 +3,7 @@ const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
 const roomStore = require('./lib/rooms');
+const settingsStore = require('./lib/settings');
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -15,7 +16,8 @@ const io = new Server(server, {
   pingInterval: 25000,
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '3mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 function getParticipantCount(roomId) {
@@ -42,6 +44,10 @@ function broadcastRoomsChanged() {
 
 app.get('/api/rooms', (_req, res) => {
   res.json(mapRoomsForApi());
+});
+
+app.get('/api/settings', (_req, res) => {
+  res.json(settingsStore.getPublicSettings());
 });
 
 app.post('/api/admin/login', (req, res) => {
@@ -102,6 +108,40 @@ app.delete('/api/admin/rooms/:id', (req, res) => {
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
+});
+
+app.post('/api/admin/logo', (req, res) => {
+  if (!isAdmin(req)) {
+    res.status(401).json({ ok: false, error: 'Yetkisiz erişim' });
+    return;
+  }
+
+  const { data } = req.body || {};
+  const match = typeof data === 'string' ? data.match(/^data:(image\/[\w.+-]+);base64,(.+)$/) : null;
+
+  if (!match) {
+    res.status(400).json({ ok: false, error: 'Geçersiz logo dosyası' });
+    return;
+  }
+
+  try {
+    const mimeType = match[1];
+    const buffer = Buffer.from(match[2], 'base64');
+    const logoUrl = settingsStore.saveLogo(buffer, mimeType);
+    res.json({ ok: true, logoUrl });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete('/api/admin/logo', (req, res) => {
+  if (!isAdmin(req)) {
+    res.status(401).json({ ok: false, error: 'Yetkisiz erişim' });
+    return;
+  }
+
+  settingsStore.removeLogo();
+  res.json({ ok: true, logoUrl: null });
 });
 
 app.get('/health', (_req, res) => {

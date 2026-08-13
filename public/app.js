@@ -42,6 +42,33 @@ function shouldInitiate(localId, remoteId) {
   return localId < remoteId;
 }
 
+function applyLogo(logoUrl) {
+  const img = $('#site-logo');
+  const fallback = $('#logo-fallback');
+  if (!img || !fallback) return;
+
+  if (logoUrl) {
+    img.src = logoUrl;
+    img.classList.remove('hidden');
+    fallback.classList.add('hidden');
+  } else {
+    img.removeAttribute('src');
+    img.classList.add('hidden');
+    fallback.classList.remove('hidden');
+  }
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const data = await res.json();
+    applyLogo(data.logoUrl);
+  } catch {
+    /* varsayilan ikon */
+  }
+}
+
 async function loadRooms() {
   try {
     const controller = new AbortController();
@@ -594,6 +621,7 @@ function initLobbySocket() {
 }
 
 initRoomListFromPage();
+loadSettings();
 loadRooms();
 initLobbySocket();
 setInterval(loadRooms, 15000);

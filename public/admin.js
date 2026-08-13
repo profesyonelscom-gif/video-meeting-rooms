@@ -138,11 +138,88 @@ async function deleteRoom(id) {
 
 function initAdminPanel() {
   showScreen('admin-panel');
+  loadLogoSettings();
   loadAdminRooms();
 
   const socket = io({ transports: ['websocket', 'polling'] });
   socket.on('rooms-changed', renderAdminRooms);
 }
+
+function updateLogoPreview(logoUrl) {
+  const preview = $('#admin-logo-preview');
+  const placeholder = $('#admin-logo-placeholder');
+  const removeBtn = $('#remove-logo-btn');
+
+  if (logoUrl) {
+    preview.src = logoUrl;
+    preview.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+    removeBtn.classList.remove('hidden');
+  } else {
+    preview.removeAttribute('src');
+    preview.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    removeBtn.classList.add('hidden');
+  }
+}
+
+async function loadLogoSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const data = await res.json();
+    updateLogoPreview(data.logoUrl);
+  } catch {
+    updateLogoPreview(null);
+  }
+}
+
+async function uploadLogo(file) {
+  if (!file.type.startsWith('image/')) {
+    showToast('Sadece resim dosyası yükleyebilirsiniz');
+    return;
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('Logo en fazla 2 MB olabilir');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = await adminFetch('/api/admin/logo', {
+        method: 'POST',
+        body: JSON.stringify({ data: reader.result }),
+      });
+      updateLogoPreview(data.logoUrl);
+      showToast('Logo yüklendi');
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function removeLogo() {
+  if (!confirm('Logoyu kaldırmak istediğinize emin misiniz?')) return;
+
+  try {
+    await adminFetch('/api/admin/logo', { method: 'DELETE' });
+    updateLogoPreview(null);
+    showToast('Logo kaldırıldı');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+$('#logo-file').addEventListener('change', (e) => {
+  const file = e.target.files?.[0];
+  if (file) uploadLogo(file);
+  e.target.value = '';
+});
+
+$('#remove-logo-btn').addEventListener('click', removeLogo);
 
 $('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();

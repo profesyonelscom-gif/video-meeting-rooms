@@ -38,6 +38,24 @@
         </header>
 
         <div class="admin-card">
+          <h2>Site logosu</h2>
+          <p class="card-desc">Ana sayfadaki kamera simgesi yerine görünecek logo (PNG, JPG, WEBP, GIF, SVG · max 2 MB)</p>
+          <div class="logo-upload-area">
+            <div class="logo-preview-wrap">
+              <img id="admin-logo-preview" class="logo-preview hidden" alt="Logo önizleme" />
+              <div id="admin-logo-placeholder" class="logo-placeholder">Logo yok</div>
+            </div>
+            <div class="logo-upload-actions">
+              <label class="btn btn-secondary file-label">
+                Logo Yükle
+                <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden />
+              </label>
+              <button type="button" id="remove-logo-btn" class="btn btn-danger btn-sm hidden">Logoyu Kaldır</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="admin-card">
           <h2>Yeni oda ekle</h2>
           <form id="add-room-form" class="inline-form">
             <input id="new-room-name" type="text" placeholder="Oda adı (ör. Satış Toplantısı)" maxlength="64" required />
