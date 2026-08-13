@@ -29,12 +29,18 @@
           />
 
           <p class="section-label">Oda seçin</p>
-          <div id="room-list" class="room-grid"></div>
+          <div id="room-list" class="room-grid">
+            <p class="empty-msg" id="room-loading">Odalar yükleniyor...</p>
+          </div>
 
           <button type="submit" class="btn btn-primary" id="join-btn" disabled>
             Odaya Katıl
           </button>
         </form>
+
+        <div class="lobby-footer">
+          <a href="/admin.html" class="text-link">Admin Panel →</a>
+        </div>
       </div>
     </section>
 

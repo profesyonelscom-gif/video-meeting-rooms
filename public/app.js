@@ -19,6 +19,9 @@ const state = {
   camEnabled: true,
   screenSharing: false,
   selectedRoom: null,
+  selectedRoomName: '',
+  lobbySocket: null,
+  roomsCache: [],
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -40,10 +43,39 @@ function shouldInitiate(localId, remoteId) {
 }
 
 async function loadRooms() {
-  const res = await fetch('/api/rooms');
-  const rooms = await res.json();
+  const container = $('#room-list');
+
+  try {
+    const res = await fetch('/api/rooms');
+    if (!res.ok) throw new Error('Sunucuya bağlanılamadı');
+
+    const rooms = await res.json();
+    state.roomsCache = rooms;
+    renderRoomList(rooms);
+  } catch (err) {
+    console.error('Oda listesi hatasi:', err);
+    container.innerHTML = `
+      <p class="empty-msg error">Odalar yüklenemedi. Sunucunun çalıştığından emin olun.</p>
+    `;
+    state.selectedRoom = null;
+    updateJoinButton();
+  }
+}
+
+function renderRoomList(rooms) {
   const container = $('#room-list');
   container.innerHTML = '';
+
+  if (!rooms.length) {
+    container.innerHTML = `
+      <p class="empty-msg">Henüz oda yok. <a href="/admin.html" class="text-link">Admin panelden</a> oda ekleyin.</p>
+    `;
+    state.selectedRoom = null;
+    updateJoinButton();
+    return;
+  }
+
+  const previousSelection = state.selectedRoom;
 
   rooms.forEach((room) => {
     const el = document.createElement('button');
@@ -51,16 +83,27 @@ async function loadRooms() {
     el.className = 'room-option';
     el.dataset.roomId = room.id;
     el.innerHTML = `
-      <div class="room-name">${room.name}</div>
+      <div class="room-name">${escapeHtml(room.name)}</div>
       <div class="room-count">${room.participants} katılımcı</div>
     `;
-    el.addEventListener('click', () => selectRoom(room.id, el));
+    el.addEventListener('click', () => selectRoom(room.id, room.name, el));
     container.appendChild(el);
+
+    if (previousSelection === room.id) {
+      selectRoom(room.id, room.name, el);
+    }
   });
 }
 
-function selectRoom(roomId, el) {
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function selectRoom(roomId, roomName, el) {
   state.selectedRoom = roomId;
+  state.selectedRoomName = roomName;
   document.querySelectorAll('.room-option').forEach((o) => o.classList.remove('selected'));
   el.classList.add('selected');
   updateJoinButton();
@@ -379,8 +422,7 @@ async function joinRoom() {
 
     state.socketId = response.socketId;
 
-    const roomTitle = roomId.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    $('#room-title').textContent = roomTitle;
+    $('#room-title').textContent = response.roomName || state.selectedRoomName || roomId;
     showScreen('room');
     addLocalVideo();
     updateParticipantCount();
@@ -527,8 +569,19 @@ $('#toggle-cam').addEventListener('click', toggleCam);
 $('#toggle-screen').addEventListener('click', toggleScreenShare);
 $('#leave-btn').addEventListener('click', leaveRoom);
 
+function initLobbySocket() {
+  if (state.lobbySocket) return;
+
+  state.lobbySocket = io({ transports: ['websocket', 'polling'] });
+  state.lobbySocket.on('rooms-changed', (rooms) => {
+    state.roomsCache = rooms;
+    renderRoomList(rooms);
+  });
+}
+
 loadRooms();
-setInterval(loadRooms, 10000);
+initLobbySocket();
+setInterval(loadRooms, 15000);
 
 window.addEventListener('beforeunload', () => {
   if (state.socket) {

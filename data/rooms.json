@@ -1,0 +1,6 @@
+[
+  { "id": "oda-1", "name": "Genel Toplantı" },
+  { "id": "oda-2", "name": "Proje Odası" },
+  { "id": "oda-3", "name": "Eğitim Odası" },
+  { "id": "oda-4", "name": "Destek Odası" }
+]

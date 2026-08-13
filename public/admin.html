@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Toplantı Odaları</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app">
+    <section id="admin-login" class="screen active">
+      <div class="lobby-card">
+        <div class="logo">
+          <span class="logo-icon">⚙️</span>
+          <h1>Admin Panel</h1>
+          <p>Oda ekleme ve isimlendirme</p>
+        </div>
+        <form id="login-form">
+          <label for="admin-password">Admin şifresi</label>
+          <input id="admin-password" type="password" placeholder="Şifrenizi girin" required />
+          <button type="submit" class="btn btn-primary">Giriş Yap</button>
+        </form>
+        <a href="/" class="text-link">← Ana sayfaya dön</a>
+      </div>
+    </section>
+
+    <section id="admin-panel" class="screen">
+      <div class="admin-layout">
+        <header class="admin-header">
+          <div>
+            <h1>Oda Yönetimi</h1>
+            <p>Toplantı odalarını ekleyin, adlandırın veya silin</p>
+          </div>
+          <div class="admin-header-actions">
+            <a href="/" class="btn btn-secondary">Ana Sayfa</a>
+            <button id="logout-btn" class="btn btn-danger">Çıkış</button>
+          </div>
+        </header>
+
+        <div class="admin-card">
+          <h2>Yeni oda ekle</h2>
+          <form id="add-room-form" class="inline-form">
+            <input id="new-room-name" type="text" placeholder="Oda adı (ör. Satış Toplantısı)" maxlength="64" required />
+            <button type="submit" class="btn btn-primary">Ekle</button>
+          </form>
+        </div>
+
+        <div class="admin-card">
+          <h2>Mevcut odalar</h2>
+          <div id="admin-room-list" class="admin-room-list"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>
