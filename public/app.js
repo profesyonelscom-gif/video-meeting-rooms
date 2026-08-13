@@ -173,8 +173,10 @@ function selectRoom(roomId, roomName, el) {
 }
 
 function updateJoinButton() {
-  const name = $('#user-name').value.trim();
-  $('#join-btn').disabled = !name || !state.selectedRoom;
+  const nameInput = $('#user-name');
+  const joinBtn = $('#join-btn');
+  if (!nameInput || !joinBtn) return;
+  joinBtn.disabled = !nameInput.value.trim() || !state.selectedRoom;
 }
 
 async function getLocalMedia() {
@@ -622,15 +624,17 @@ function leaveRoom() {
   loadRooms();
 }
 
-$('#user-name').addEventListener('input', updateJoinButton);
-$('#join-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  joinRoom();
-});
-$('#toggle-mic').addEventListener('click', toggleMic);
-$('#toggle-cam').addEventListener('click', toggleCam);
-$('#toggle-screen').addEventListener('click', toggleScreenShare);
-$('#leave-btn').addEventListener('click', leaveRoom);
+function bindUiEvents() {
+  $('#user-name')?.addEventListener('input', updateJoinButton);
+  $('#join-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    joinRoom();
+  });
+  $('#toggle-mic')?.addEventListener('click', toggleMic);
+  $('#toggle-cam')?.addEventListener('click', toggleCam);
+  $('#toggle-screen')?.addEventListener('click', toggleScreenShare);
+  $('#leave-btn')?.addEventListener('click', leaveRoom);
+}
 
 function initLobbySocket() {
   if (state.lobbySocket || typeof io === 'undefined') return;
@@ -650,14 +654,20 @@ function initLobbySocket() {
 
 async function initApp() {
   initRoomList();
+  bindUiEvents();
 
-  const initial = getInitialRooms();
-  if (initial.length) {
-    renderRoomList(initial);
+  const serverRendered = document.querySelectorAll('#room-list .room-option').length;
+  if (serverRendered) {
+    state.roomsCache = getInitialRooms();
   } else {
-    const container = $('#room-list');
-    if (container) {
-      container.innerHTML = '<p class="empty-msg">Odalar yükleniyor...</p>';
+    const initial = getInitialRooms();
+    if (initial.length) {
+      renderRoomList(initial);
+    } else {
+      const container = $('#room-list');
+      if (container && !container.textContent.trim()) {
+        container.innerHTML = '<p class="empty-msg">Odalar yükleniyor...</p>';
+      }
     }
   }
 
@@ -667,7 +677,21 @@ async function initApp() {
   setInterval(loadRooms, 10000);
 }
 
-initApp();
+function boot() {
+  initApp().catch((err) => {
+    console.error('Uygulama baslatilamadi:', err);
+    const container = $('#room-list');
+    if (container && !container.querySelector('.room-option')) {
+      container.innerHTML = '<p class="empty-msg error">Odalar yuklenemedi. Sayfayi yenileyin.</p>';
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
 
 window.addEventListener('beforeunload', () => {
   if (state.socket) {

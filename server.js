@@ -20,19 +20,6 @@ const io = new Server(server, {
 app.use(express.json({ limit: '3mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
 
-function sendIndexPage(_req, res) {
-  const templatePath = path.join(__dirname, 'public', 'index.html');
-  const template = fs.readFileSync(templatePath, 'utf8');
-  const roomsJson = JSON.stringify(mapRoomsForApi()).replace(/</g, '\\u003c');
-  const html = template.replace('__ROOMS_JSON__', roomsJson);
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(html);
-}
-
-app.get('/', sendIndexPage);
-app.get('/index.html', (_req, res) => res.redirect('/'));
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
-
 function getParticipantCount(roomId) {
   return io.sockets.adapter.rooms.get(roomId)?.size || 0;
 }
@@ -44,6 +31,46 @@ function mapRoomsForApi() {
     participants: getParticipantCount(room.id),
   }));
 }
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildRoomsHtml(rooms) {
+  if (!rooms.length) {
+    return '<p class="empty-msg">Henüz oda yok. <a href="/admin.html" class="text-link">Admin panelden</a> oda ekleyin.</p>';
+  }
+
+  return rooms
+    .map(
+      (room) => `
+    <button type="button" class="room-option" data-room-id="${escapeHtml(room.id)}" data-room-name="${escapeHtml(room.name)}">
+      <div class="room-name">${escapeHtml(room.name)}</div>
+      <div class="room-count">${room.participants || 0} katılımcı</div>
+    </button>`
+    )
+    .join('');
+}
+
+function sendIndexPage(_req, res) {
+  const templatePath = path.join(__dirname, 'public', 'index.html');
+  const template = fs.readFileSync(templatePath, 'utf8');
+  const rooms = mapRoomsForApi();
+  const roomsJson = JSON.stringify(rooms).replace(/</g, '\\u003c');
+  const html = template
+    .replace('__ROOMS_JSON__', roomsJson)
+    .replace('__ROOMS_HTML__', buildRoomsHtml(rooms));
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(html);
+}
+
+app.get('/', sendIndexPage);
+app.get('/index.html', (_req, res) => res.redirect('/'));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 function isAdmin(req) {
   const auth = req.headers.authorization || '';
