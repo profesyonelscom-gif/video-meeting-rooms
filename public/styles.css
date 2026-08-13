@@ -290,6 +290,15 @@ body {
   transform: scaleX(-1);
 }
 
+.video-tile.screen-share video {
+  object-fit: contain;
+  transform: none;
+}
+
+.video-tile.local.screen-share video {
+  transform: none;
+}
+
 .video-tile .tile-label {
   position: absolute;
   bottom: 10px;

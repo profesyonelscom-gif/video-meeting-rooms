@@ -2,17 +2,22 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
   ],
 };
 
 const state = {
   socket: null,
   localStream: null,
+  cameraStream: null,
+  screenStream: null,
   peers: new Map(),
   roomId: null,
   userName: '',
+  socketId: null,
   micEnabled: true,
   camEnabled: true,
+  screenSharing: false,
   selectedRoom: null,
 };
 
@@ -28,6 +33,10 @@ function showToast(message) {
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
   $(`#${id}`).classList.add('active');
+}
+
+function shouldInitiate(localId, remoteId) {
+  return localId < remoteId;
 }
 
 async function loadRooms() {
@@ -64,10 +73,11 @@ function updateJoinButton() {
 
 async function getLocalMedia() {
   try {
-    state.localStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: { echoCancellation: true, noiseSuppression: true },
+    state.cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
+    state.localStream = state.cameraStream;
     return true;
   } catch (err) {
     showToast('Kamera/mikrofon erişimi reddedildi. İzin verin ve tekrar deneyin.');
@@ -76,19 +86,45 @@ async function getLocalMedia() {
   }
 }
 
-function createPeerConnection(remoteId, remoteName, isInitiator) {
-  if (state.peers.has(remoteId)) {
-    return state.peers.get(remoteId).pc;
+function getActiveVideoTrack() {
+  return state.localStream?.getVideoTracks()[0] || null;
+}
+
+async function flushIceCandidates(peer) {
+  if (!peer.pendingCandidates?.length || !peer.pc.remoteDescription) return;
+  for (const candidate of peer.pendingCandidates) {
+    try {
+      await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+      console.warn('ICE candidate eklenemedi:', err);
+    }
   }
+  peer.pendingCandidates = [];
+}
+
+async function addIceCandidate(peer, candidate) {
+  if (!candidate) return;
+  if (peer.pc.remoteDescription) {
+    await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+  } else {
+    peer.pendingCandidates = peer.pendingCandidates || [];
+    peer.pendingCandidates.push(candidate);
+  }
+}
+
+function createPeerConnection(remoteId, remoteName) {
+  const existing = state.peers.get(remoteId);
+  if (existing) return existing.pc;
 
   const pc = new RTCPeerConnection(ICE_SERVERS);
+  const peer = { pc, remoteName, remoteStream: null, pendingCandidates: [] };
 
   state.localStream.getTracks().forEach((track) => {
     pc.addTrack(track, state.localStream);
   });
 
   pc.onicecandidate = (event) => {
-    if (event.candidate) {
+    if (event.candidate && state.socket) {
       state.socket.emit('signal', {
         to: remoteId,
         signal: { type: 'ice-candidate', candidate: event.candidate },
@@ -97,28 +133,34 @@ function createPeerConnection(remoteId, remoteName, isInitiator) {
   };
 
   pc.ontrack = (event) => {
-    const peer = state.peers.get(remoteId);
-    if (!peer) return;
+    const currentPeer = state.peers.get(remoteId);
+    if (!currentPeer) return;
 
-    if (!peer.remoteStream) {
-      peer.remoteStream = new MediaStream();
+    const stream = event.streams[0] || currentPeer.remoteStream || new MediaStream();
+    if (!event.streams[0]) {
+      stream.addTrack(event.track);
     }
-    peer.remoteStream.addTrack(event.track);
-    updateRemoteVideo(remoteId, peer.remoteStream, remoteName);
+
+    currentPeer.remoteStream = stream;
+    updateRemoteVideo(remoteId, stream, currentPeer.remoteName);
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+    if (pc.connectionState === 'failed') {
+      pc.restartIce();
+    } else if (pc.connectionState === 'closed') {
       removePeer(remoteId);
     }
   };
 
-  state.peers.set(remoteId, { pc, remoteName, remoteStream: null });
+  state.peers.set(remoteId, peer);
   return pc;
 }
 
 async function createOffer(remoteId, remoteName) {
-  const pc = createPeerConnection(remoteId, remoteName, true);
+  if (!shouldInitiate(state.socketId, remoteId)) return;
+
+  const pc = createPeerConnection(remoteId, remoteName);
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   state.socket.emit('signal', {
@@ -130,31 +172,44 @@ async function createOffer(remoteId, remoteName) {
 async function handleSignal(from, signal, userName) {
   let peer = state.peers.get(from);
 
-  if (signal.type === 'offer') {
-    const pc = createPeerConnection(from, userName, false);
-    await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    state.socket.emit('signal', {
-      to: from,
-      signal: { type: 'answer', sdp: answer },
-    });
-  } else if (signal.type === 'answer') {
-    if (!peer) {
-      createPeerConnection(from, userName, false);
+  try {
+    if (signal.type === 'offer') {
+      const pc = createPeerConnection(from, userName);
       peer = state.peers.get(from);
+
+      if (pc.signalingState !== 'stable') {
+        await pc.setLocalDescription({ type: 'rollback' });
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      await flushIceCandidates(peer);
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      state.socket.emit('signal', {
+        to: from,
+        signal: { type: 'answer', sdp: answer },
+      });
+    } else if (signal.type === 'answer') {
+      if (!peer) {
+        createPeerConnection(from, userName);
+        peer = state.peers.get(from);
+      }
+
+      if (peer.pc.signalingState === 'have-local-offer') {
+        await peer.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+        await flushIceCandidates(peer);
+      }
+    } else if (signal.type === 'ice-candidate') {
+      if (!peer) {
+        createPeerConnection(from, userName);
+        peer = state.peers.get(from);
+      }
+      await addIceCandidate(peer, signal.candidate);
     }
-    if (peer) {
-      await peer.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-    }
-  } else if (signal.type === 'ice-candidate') {
-    if (!peer) {
-      createPeerConnection(from, userName, false);
-      peer = state.peers.get(from);
-    }
-    if (signal.candidate) {
-      await peer.pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
-    }
+  } catch (err) {
+    console.error('Sinyal isleme hatasi:', err, signal.type, from);
   }
 }
 
@@ -167,6 +222,12 @@ function getInitials(name) {
     .slice(0, 2);
 }
 
+function playVideo(video) {
+  video.play().catch((err) => {
+    console.warn('Video oynatilamadi:', err);
+  });
+}
+
 function addLocalVideo() {
   const grid = $('#video-grid');
   const tile = document.createElement('div');
@@ -177,8 +238,18 @@ function addLocalVideo() {
     <span class="tile-label">${state.userName} (Sen)</span>
     <div class="tile-status"></div>
   `;
-  tile.querySelector('video').srcObject = state.localStream;
+  const video = tile.querySelector('video');
+  video.srcObject = state.localStream;
+  playVideo(video);
   grid.appendChild(tile);
+}
+
+function updateLocalVideo() {
+  const video = document.querySelector('#tile-local video');
+  if (video) {
+    video.srcObject = state.localStream;
+    playVideo(video);
+  }
 }
 
 function updateRemoteVideo(remoteId, stream, name) {
@@ -198,7 +269,12 @@ function updateRemoteVideo(remoteId, stream, name) {
   }
 
   const video = tile.querySelector('video');
-  video.srcObject = stream;
+  if (video.srcObject !== stream) {
+    video.srcObject = stream;
+    playVideo(video);
+  }
+
+  tile.querySelector('.tile-label').textContent = name;
 
   const hasVideo = stream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live');
   tile.classList.toggle('no-video', !hasVideo);
@@ -216,6 +292,15 @@ function updateRemoteVideo(remoteId, stream, name) {
   }
 
   updateParticipantCount();
+}
+
+async function replaceVideoTrackOnPeers(track) {
+  for (const peer of state.peers.values()) {
+    const sender = peer.pc.getSenders().find((s) => s.track?.kind === 'video');
+    if (sender) {
+      await sender.replaceTrack(track);
+    }
+  }
 }
 
 function removePeer(remoteId) {
@@ -237,10 +322,14 @@ function cleanupRoom() {
   state.peers.forEach((peer) => peer.pc.close());
   state.peers.clear();
 
-  if (state.localStream) {
-    state.localStream.getTracks().forEach((t) => t.stop());
-    state.localStream = null;
-  }
+  [state.localStream, state.cameraStream, state.screenStream].forEach((stream) => {
+    stream?.getTracks().forEach((t) => t.stop());
+  });
+
+  state.localStream = null;
+  state.cameraStream = null;
+  state.screenStream = null;
+  state.screenSharing = false;
 
   if (state.socket) {
     state.socket.emit('leave-room');
@@ -249,7 +338,9 @@ function cleanupRoom() {
   }
 
   $('#video-grid').innerHTML = '';
+  $('#toggle-screen').classList.remove('active');
   state.roomId = null;
+  state.socketId = null;
 }
 
 async function joinRoom() {
@@ -286,6 +377,8 @@ async function joinRoom() {
       return;
     }
 
+    state.socketId = response.socketId;
+
     const roomTitle = roomId.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     $('#room-title').textContent = roomTitle;
     showScreen('room');
@@ -300,7 +393,7 @@ async function joinRoom() {
 
 function toggleMic() {
   state.micEnabled = !state.micEnabled;
-  state.localStream?.getAudioTracks().forEach((t) => {
+  state.cameraStream?.getAudioTracks().forEach((t) => {
     t.enabled = state.micEnabled;
   });
   const btn = $('#toggle-mic');
@@ -309,10 +402,16 @@ function toggleMic() {
 }
 
 function toggleCam() {
+  if (state.screenSharing) {
+    showToast('Ekran paylaşımı sırasında kamera kapalı kalır.');
+    return;
+  }
+
   state.camEnabled = !state.camEnabled;
-  state.localStream?.getVideoTracks().forEach((t) => {
+  state.cameraStream?.getVideoTracks().forEach((t) => {
     t.enabled = state.camEnabled;
   });
+
   const btn = $('#toggle-cam');
   btn.classList.toggle('active', state.camEnabled);
   btn.classList.toggle('muted', !state.camEnabled);
@@ -334,6 +433,84 @@ function toggleCam() {
   }
 }
 
+async function toggleScreenShare() {
+  const btn = $('#toggle-screen');
+
+  if (state.screenSharing) {
+    await stopScreenShare();
+    btn.classList.remove('active');
+    return;
+  }
+
+  try {
+    state.screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: 'always' },
+      audio: false,
+    });
+
+    const screenTrack = state.screenStream.getVideoTracks()[0];
+    state.screenSharing = true;
+    state.localStream = state.screenStream;
+
+    if (state.cameraStream) {
+      state.cameraStream.getVideoTracks().forEach((t) => {
+        t.enabled = false;
+      });
+    }
+
+    await replaceVideoTrackOnPeers(screenTrack);
+    updateLocalVideo();
+
+    const localTile = $('#tile-local');
+    localTile?.classList.add('screen-share');
+    localTile?.classList.remove('no-video');
+    localTile?.querySelector('.avatar')?.remove();
+    localTile?.querySelector('.tile-label').textContent = `${state.userName} (Ekran)`;
+
+    btn.classList.add('active');
+    showToast('Ekran paylaşımı başladı');
+
+    screenTrack.onended = () => {
+      stopScreenShare();
+    };
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') {
+      console.error(err);
+      showToast('Ekran paylaşımı başlatılamadı.');
+    }
+  }
+}
+
+async function stopScreenShare() {
+  if (!state.screenSharing) return;
+
+  state.screenStream?.getTracks().forEach((t) => t.stop());
+  state.screenStream = null;
+  state.screenSharing = false;
+
+  state.localStream = state.cameraStream;
+
+  if (state.cameraStream) {
+    state.cameraStream.getVideoTracks().forEach((t) => {
+      t.enabled = state.camEnabled;
+    });
+  }
+
+  const cameraTrack = getActiveVideoTrack();
+  await replaceVideoTrackOnPeers(cameraTrack);
+  updateLocalVideo();
+
+  const localTile = $('#tile-local');
+  if (localTile) {
+    localTile.classList.remove('screen-share');
+    localTile.querySelector('.tile-label').textContent = `${state.userName} (Sen)`;
+    localTile.classList.toggle('no-video', !state.camEnabled);
+  }
+
+  $('#toggle-screen').classList.remove('active');
+  showToast('Ekran paylaşımı durduruldu');
+}
+
 function leaveRoom() {
   cleanupRoom();
   showScreen('lobby');
@@ -347,6 +524,7 @@ $('#join-form').addEventListener('submit', (e) => {
 });
 $('#toggle-mic').addEventListener('click', toggleMic);
 $('#toggle-cam').addEventListener('click', toggleCam);
+$('#toggle-screen').addEventListener('click', toggleScreenShare);
 $('#leave-btn').addEventListener('click', leaveRoom);
 
 loadRooms();
