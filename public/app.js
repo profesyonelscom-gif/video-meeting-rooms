@@ -128,6 +128,27 @@ function setCamEnabled(enabled) {
   updateLocalTileVideoState();
 }
 
+function setSplashStatus(message) {
+  const el = document.getElementById('splash-status');
+  if (el && message) el.textContent = message;
+}
+
+function hideSplash() {
+  const splash = document.getElementById('splash-screen');
+  if (!splash || splash.classList.contains('hidden')) return;
+  splash.classList.add('hidden');
+  splash.setAttribute('aria-busy', 'false');
+  setTimeout(() => splash.remove(), 400);
+}
+
+function startKeepAlive() {
+  const ping = () => {
+    fetch('/health', { cache: 'no-store', mode: 'same-origin' }).catch(() => {});
+  };
+  ping();
+  setInterval(ping, 4 * 60 * 1000);
+}
+
 function applyLogo(logoUrl) {
   const img = $('#site-logo');
   const fallback = $('#logo-fallback');
@@ -1011,8 +1032,10 @@ function initLobbySocket() {
 }
 
 async function initApp() {
+  setSplashStatus('Odalar yükleniyor...');
   initRoomList();
   bindUiEvents();
+  startKeepAlive();
 
   const serverRendered = document.querySelectorAll('#room-list .room-option').length;
   if (serverRendered) {
@@ -1031,17 +1054,20 @@ async function initApp() {
 
   initLobbySocket();
   await loadRooms();
-  loadSettings();
+  await loadSettings();
   setInterval(loadRooms, 10000);
+  hideSplash();
 }
 
 function boot() {
   initApp().catch((err) => {
     console.error('Uygulama baslatilamadi:', err);
+    setSplashStatus('Bağlantı hatası. Sayfayı yenileyin.');
     const container = $('#room-list');
     if (container && !container.querySelector('.room-option')) {
       container.innerHTML = '<p class="empty-msg error">Odalar yuklenemedi. Sayfayi yenileyin.</p>';
     }
+    hideSplash();
   });
 }
 

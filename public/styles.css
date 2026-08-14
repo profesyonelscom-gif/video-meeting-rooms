@@ -49,6 +49,10 @@ html {
   min-height: 100dvh;
 }
 
+body:has(#splash-screen:not(.hidden)) #app {
+  visibility: hidden;
+}
+
 .screen {
   display: none;
   min-height: 100vh;
