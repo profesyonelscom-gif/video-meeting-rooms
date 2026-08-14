@@ -152,16 +152,29 @@ function startKeepAlive() {
 function applyLogo(logoUrl) {
   const img = $('#site-logo');
   const fallback = $('#logo-fallback');
-  if (!img || !fallback) return;
+  const splashImg = document.getElementById('splash-logo-img');
+  const splashFallback = document.getElementById('splash-logo-fallback');
 
   if (logoUrl) {
-    img.src = logoUrl;
-    img.classList.remove('hidden');
-    fallback.classList.add('hidden');
+    if (img) {
+      img.src = logoUrl;
+      img.classList.remove('hidden');
+    }
+    fallback?.classList.add('hidden');
+
+    if (splashImg) {
+      splashImg.src = logoUrl;
+      splashImg.classList.remove('hidden');
+    }
+    splashFallback?.classList.add('hidden');
   } else {
-    img.removeAttribute('src');
-    img.classList.add('hidden');
-    fallback.classList.remove('hidden');
+    img?.removeAttribute('src');
+    img?.classList.add('hidden');
+    fallback?.classList.remove('hidden');
+
+    splashImg?.removeAttribute('src');
+    splashImg?.classList.add('hidden');
+    splashFallback?.classList.remove('hidden');
   }
 }
 
@@ -1053,8 +1066,7 @@ async function initApp() {
   }
 
   initLobbySocket();
-  await loadRooms();
-  await loadSettings();
+  await Promise.all([loadSettings(), loadRooms()]);
   setInterval(loadRooms, 10000);
   hideSplash();
 }

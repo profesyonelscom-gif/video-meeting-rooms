@@ -28,7 +28,28 @@
       pointer-events: none;
     }
 
-    .splash-logo {
+    .splash-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 80px;
+    }
+
+    .splash-logo-img {
+      display: block;
+      max-width: 200px;
+      max-height: 80px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+    }
+
+    .splash-logo-img.hidden,
+    .splash-logo-fallback.hidden {
+      display: none;
+    }
+
+    .splash-logo-fallback {
       font-size: 56px;
       line-height: 1;
     }
@@ -58,11 +79,14 @@
       to { transform: rotate(360deg); }
     }
   </style>
-  <link rel="stylesheet" href="/styles.css?v=11">
+  <link rel="stylesheet" href="/styles.css?v=12">
 </head>
 <body>
   <div id="splash-screen" aria-live="polite" aria-busy="true">
-    <div class="splash-logo" id="splash-logo">📹</div>
+    <div class="splash-brand">
+      <img id="splash-logo-img" class="splash-logo-img __SPLASH_LOGO_IMG_HIDDEN__" src="__LOGO_URL__" alt="Logo" />
+      <span id="splash-logo-fallback" class="splash-logo-fallback __SPLASH_LOGO_FALLBACK_HIDDEN__">📹</span>
+    </div>
     <div class="splash-title">Toplantı Odaları</div>
     <p class="splash-status" id="splash-status">Bağlanılıyor...</p>
     <div class="splash-spinner" aria-hidden="true"></div>
@@ -136,6 +160,6 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

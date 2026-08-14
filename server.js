@@ -60,10 +60,14 @@ function sendIndexPage(_req, res) {
   const templatePath = path.join(__dirname, 'public', 'index.html');
   const template = fs.readFileSync(templatePath, 'utf8');
   const rooms = mapRoomsForApi();
+  const { logoUrl } = settingsStore.getPublicSettings();
   const roomsJson = JSON.stringify(rooms).replace(/</g, '\\u003c');
   const html = template
     .replace('__ROOMS_JSON__', roomsJson)
-    .replace('__ROOMS_HTML__', buildRoomsHtml(rooms));
+    .replace('__ROOMS_HTML__', buildRoomsHtml(rooms))
+    .replace('__LOGO_URL__', logoUrl ? escapeHtml(logoUrl) : '')
+    .replace('__SPLASH_LOGO_IMG_HIDDEN__', logoUrl ? '' : 'hidden')
+    .replace('__SPLASH_LOGO_FALLBACK_HIDDEN__', logoUrl ? 'hidden' : '');
   res.set('Cache-Control', 'no-store');
   res.type('html').send(html);
 }
